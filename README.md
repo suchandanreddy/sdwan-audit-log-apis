@@ -110,7 +110,7 @@ To list the CLI differences in the audit logs for last 1 hour, run the command `
                         }
                         ]
                      }
-              }
+}
 ```
 
 **Sample Response:**
