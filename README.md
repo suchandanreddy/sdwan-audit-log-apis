@@ -62,8 +62,9 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  auditlog-fields  Retrieve Audit log Query fields.
-  list-auditlogs   Retrieve CLI diff in Audit log.
+  auditlog-fields         Retrieve Audit log Query fields.
+  list-auditlogs          Retrieve CLI diff in Audit logs for custom start...
+  list-n-hours-auditlogs  Retrieve CLI diff in Audit logs for last n hours...
 ```
 
 **Example-1:**
@@ -81,11 +82,11 @@ logid(string)     logfeature(string)  logmessage(string)  logdetails(string)
 
 **Example-2:** 
 
-To list the CLI differences in the audit logs for last 1 hour, run the command `python3 audit-logs.py list-auditlogs` on macOS/Ubuntu env or `py -3.7 audit-logs.py list-auditlogs` on windows env
+To list the CLI differences in the audit logs for last 2 hours, run the command `python3 audit-logs.py list-n-hours-auditlogs --last_n_hours 2` on macOS/Ubuntu env or `py -3.7 audit-logs.py list-n-hours-auditlogs --last_n_hours 2` on windows env
 
 **Query Payload:**
 
-- Below Query retrieves the Audit logs related to `template` changes in `last 1 hour`
+- Below Query retrieves the Audit logs related to `template` changes in `last n hours` based on the user input of number of hours value.
 
 ```
 {
@@ -94,7 +95,7 @@ To list the CLI differences in the audit logs for last 1 hour, run the command `
                 "rules": [
                         {
                             "value": [
-                            "1"
+                            <last_n_hours>
                             ],
                             "field": "entry_time",
                             "type": "date",
@@ -116,16 +117,137 @@ To list the CLI differences in the audit logs for last 1 hour, run the command `
 **Sample Response:**
 
 ```
+python3 audit-logs.py list-n-hours-auditlogs --help
+Usage: audit-logs.py list-n-hours-auditlogs [OPTIONS]
+
+  Retrieve CLI diff in Audit logs for last n hours
+  Example command: ./audit-logs.py list_auditlogs
+
+Options:
+  --last_n_hours TEXT  Audit logs for last n hours
+  --help               Show this message and exit.
+```
+
+```
+python3 audit-logs.py list-n-hours-auditlogs --last_n_hours 2
+╒═════════════════════╤════════╤═════════════╤══════════╤════════════════════════════════════════════════════════════════════════════════════════════════════╕
+│ Date                │ User   │ User IP     │ Device   │ Message                                                                                            │
+╞═════════════════════╪════════╪═════════════╪══════════╪════════════════════════════════════════════════════════════════════════════════════════════════════╡
+│ 07/23/2020 08:31:40 │ admin  │ 10.24.31.49 │ 1.1.1.6  │ Template updated_20_1_BR2-CSR-1000v successfully attached to device 1.1.1.6 with personality:vedge │
+╘═════════════════════╧════════╧═════════════╧══════════╧════════════════════════════════════════════════════════════════════════════════════════════════════╛
+---
+
++++
+
+@@ -307,7 +307,7 @@
+
+    no shutdown
+    arp timeout 1200
+    vrf forwarding 10
+-   ip address 192.168.40.4 255.255.255.0
++   ip address 192.168.40.1 255.255.255.0
+    ip directed-broadcast
+    no ip redirects
+    ip mtu    1500
+@@ -484,11 +484,6 @@
+
+    flow-visibility
+    no implicit-acl-logging
+    log-frequency        1000
+-   policer 100M
+-    rate   100000000
+-    burst  10000000
+-    exceed drop
+-   !
+    lists
+     data-prefix-list BR2-Prefix-list
+      ip-prefix 192.168.40.0/24
+```
+
+In the above output `-` refers to the new configuration after template is pushed and `+` to the old configuration before template is pushed.
+
+**Example-3:** 
+
+To list the CLI differences in the audit logs between a start and end date, run the command `python3 audit-logs.py list-auditlogs` on macOS/Ubuntu env or `py -3.7 audit-logs.py list-auditlogs` on windows env
+
+**Query Payload:**
+
+- Below Query retrieves the Audit logs related to `template` changes between `start_date` and `end_date` based on the user input.
+
+```
+{
+    "query": {
+               "condition": "AND",
+               "rules": [
+                        {
+                            "value": [
+                                       start_date+"T00:00:00 UTC",
+                                       end_date+"T23:59:59 UTC" 
+                            ],
+                            "field": "entry_time",
+                            "type": "date",
+                            "operator": "between"
+                        },
+                        {
+                            "value": [
+                            "template"
+                            ],
+                            "field": "logmodule",
+                            "type": "string",
+                            "operator": "in"
+                        }
+                        ]
+              }
+}
+```
+
+**Sample Response:**
+
+```
+python3 audit-logs.py list-auditlogs --help
+Usage: audit-logs.py list-auditlogs [OPTIONS]
+
+  Retrieve CLI diff in Audit logs for custom start and end date
+  Example command: ./audit-logs.py list_auditlogs
+
+Options:
+  --help  Show this message and exit.
+```
+
+```
 python3 audit-logs.py list-auditlogs
+Please enter start date(YYYY-MM-DD): 2020-07-22
+Please enter end date(YYYY-MM-DD): 2020-07-23
+╒═════════════════════╤════════╤═════════════╤══════════╤════════════════════════════════════════════════════════════════════════════════════════════════════╕
+│ Date                │ User   │ User IP     │ Device   │ Message                                                                                            │
+╞═════════════════════╪════════╪═════════════╪══════════╪════════════════════════════════════════════════════════════════════════════════════════════════════╡
+│ 07/23/2020 08:31:40 │ admin  │ 10.24.31.49 │ 1.1.1.6  │ Template updated_20_1_BR2-CSR-1000v successfully attached to device 1.1.1.6 with personality:vedge │
+╘═════════════════════╧════════╧═════════════╧══════════╧════════════════════════════════════════════════════════════════════════════════════════════════════╛
+---
 
-@@ -204,7 +204,7 @@
++++
 
-    dns 8.8.8.8 primary
-    host test ip 10.10.10.1
-    interface ge0/2
--    ip address 192.168.30.30/24
-+    ip address 192.168.30.1/24
-     no shutdown
-    !
-    interface natpool1
+@@ -307,7 +307,7 @@
+
+    no shutdown
+    arp timeout 1200
+    vrf forwarding 10
+-   ip address 192.168.40.4 255.255.255.0
++   ip address 192.168.40.1 255.255.255.0
+    ip directed-broadcast
+    no ip redirects
+    ip mtu    1500
+@@ -484,11 +484,6 @@
+
+    flow-visibility
+    no implicit-acl-logging
+    log-frequency        1000
+-   policer 100M
+-    rate   100000000
+-    burst  10000000
+-    exceed drop
+-   !
+    lists
+     data-prefix-list BR2-Prefix-list
+      ip-prefix 192.168.40.0/24
 ```

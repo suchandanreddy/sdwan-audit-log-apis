@@ -8,6 +8,9 @@ import time
 import click
 import cmd
 import difflib
+import tabulate
+import pytz
+import datetime
 
 requests.packages.urllib3.disable_warnings()
 
@@ -113,12 +116,14 @@ def auditlog_fields():
         print('Exception line number: {}'.format(sys.exc_info()[-1].tb_lineno), type(e).__name__, e)
 
 @click.command()
-def list_auditlogs():
-    """ Retrieve CLI diff in Audit log.                                  
+@click.option("--last_n_hours", help="Audit logs for last n hours")
+def list_n_hours_auditlogs(last_n_hours):
+    """ Retrieve CLI diff in Audit logs for last n hours                                 
         \nExample command: ./audit-logs.py list_auditlogs
     """
 
     try:
+        PDT = pytz.timezone('America/Los_Angeles')
         api_url = "/auditlog/severity"
 
         query = {
@@ -127,7 +132,7 @@ def list_auditlogs():
                         "rules": [
                         {
                             "value": [
-                            "1"
+                            last_n_hours
                             ],
                             "field": "entry_time",
                             "type": "date",
@@ -152,16 +157,35 @@ def list_auditlogs():
         if response.status_code == 200:
             items = response.json()["data"]
             for item in items:
+                temp = dict()
                 if item.get("auditextras"):
-                    config_diff_ids.append(item["auditextras"])
+                    temp["auditextras"] = item["auditextras"]
+                    temp["loguser"] = item.get("loguser")
+                    temp["logusersrcip"] = item.get("logusersrcip")
+                    temp_time = datetime.datetime.utcfromtimestamp(item['entry_time']/1000.)
+                    temp_time = pytz.UTC.localize(temp_time).astimezone(PDT).strftime('%m/%d/%Y %H:%M:%S')
+                    temp["entry_time"] = temp_time
+                    temp["logdeviceid"] = item.get("logdeviceid")
+                    temp["logmessage"] = item.get("logmessage")
+                    config_diff_ids.append(temp)
         else:
             click.echo("Failed to get list of Audit Logs" + str(response.text))
             exit()
-        
+
         for item in config_diff_ids:
 
-            temp = json.loads(item)
+            temp = json.loads(item["auditextras"])
             api_url = "/device/history/config/diff/list?config_id1=%s&config_id2=%s"%(temp['config_id_0'],temp['config_id_1'])
+
+            audit_headers = ["Date", "User", "User IP", "Device", "Message"]
+            tr = [item["entry_time"], item['loguser'], item['logusersrcip'], item['logdeviceid'], item['logmessage']]
+            table = list()
+            table.append(tr)
+
+            try:
+                click.echo(tabulate.tabulate(table, audit_headers, tablefmt="fancy_grid"))
+            except UnicodeEncodeError:
+                click.echo(tabulate.tabulate(table, audit_headers, tablefmt="grid"))
 
             url = base_url + api_url
             response = requests.get(url=url, headers=header, verify=False)
@@ -179,9 +203,110 @@ def list_auditlogs():
     except Exception as e:
         print('Exception line number: {}'.format(sys.exc_info()[-1].tb_lineno), type(e).__name__, e)
 
-cli.add_command(auditlog_fields)
-cli.add_command(list_auditlogs)
+@click.command()
+def list_auditlogs():
+    """ Retrieve CLI diff in Audit logs for custom start and end date                                  
+        \nExample command: ./audit-logs.py list_auditlogs
+    """
 
+    try:
+        try: 
+            start_date = input("Please enter start date(YYYY-MM-DD): ")
+            time.strptime(start_date, '%Y-%m-%d')
+        except ValueError:
+            raise ValueError("Incorrect start data format, please enter in YYYY-MM-DD") 
+        try:    
+            end_date = input("Please enter end date(YYYY-MM-DD): ")
+            time.strptime(end_date, '%Y-%m-%d')
+        except ValueError:
+            raise ValueError("Incorrect end data format, please enter in YYYY-MM-DD")    
+
+        PDT = pytz.timezone('America/Los_Angeles')
+        api_url = "/auditlog/severity"
+
+        query = {
+                    "query": {
+                        "condition": "AND",
+                        "rules": [
+                        {
+                            "value": [
+                                       start_date+"T00:00:00 UTC",
+                                       end_date+"T23:59:59 UTC" 
+                            ],
+                            "field": "entry_time",
+                            "type": "date",
+                            "operator": "between"
+                        },
+                        {
+                            "value": [
+                            "template"
+                            ],
+                            "field": "logmodule",
+                            "type": "string",
+                            "operator": "in"
+                        }
+                        ]
+                     }
+                  }
+
+        url = base_url + api_url
+
+        response = requests.get(url=url, headers=header, verify=False,  params={"query":json.dumps(query)})
+        config_diff_ids = list()
+        if response.status_code == 200:
+            items = response.json()["data"]
+            for item in items:
+                temp = dict()
+                if item.get("auditextras"):
+                    temp["auditextras"] = item["auditextras"]
+                    temp["loguser"] = item.get("loguser")
+                    temp["logusersrcip"] = item.get("logusersrcip")
+                    temp_time = datetime.datetime.utcfromtimestamp(item['entry_time']/1000.)
+                    temp_time = pytz.UTC.localize(temp_time).astimezone(PDT).strftime('%m/%d/%Y %H:%M:%S')
+                    temp["entry_time"] = temp_time
+                    temp["logdeviceid"] = item.get("logdeviceid")
+                    temp["logmessage"] = item.get("logmessage")
+                    config_diff_ids.append(temp)
+
+        else:
+            click.echo("Failed to get list of Audit Logs" + str(response.text))
+            exit()
+        
+        for item in config_diff_ids:
+
+            temp = json.loads(item["auditextras"])
+            api_url = "/device/history/config/diff/list?config_id1=%s&config_id2=%s"%(temp['config_id_0'],temp['config_id_1'])
+            
+            audit_headers = ["Date", "User", "User IP", "Device", "Message"]
+            tr = [item["entry_time"], item['loguser'], item['logusersrcip'], item['logdeviceid'], item['logmessage']]
+            table = list()
+            table.append(tr)
+
+            try:
+                click.echo(tabulate.tabulate(table, audit_headers, tablefmt="fancy_grid"))
+            except UnicodeEncodeError:
+                click.echo(tabulate.tabulate(table, audit_headers, tablefmt="grid"))
+
+            url = base_url + api_url
+            response = requests.get(url=url, headers=header, verify=False)
+
+            if response.status_code == 200:
+                temp = response.json()
+                config_old = temp[0]['config_1'].splitlines()
+                config_new = temp[1]['config_2'].splitlines()
+                for line in difflib.unified_diff(config_old, config_new):
+                    click.echo(line)
+            else:
+                click.echo("Failed to get list of Audit Logs configuration diff details" + str(response.text))
+                exit()
+
+    except Exception as e:
+        print('Exception line number: {}'.format(sys.exc_info()[-1].tb_lineno), type(e).__name__, e)
+
+
+cli.add_command(auditlog_fields)
+cli.add_command(list_n_hours_auditlogs)
+cli.add_command(list_auditlogs)
 
 if __name__ == "__main__":
     cli()
